@@ -23,7 +23,7 @@ const options = {
       },
       servers:[
         {
-            url: 'http://localhost:3000'//change this to the Azure url after finish testing
+            url: 'https://benr3433-information-security-assignment.azurewebsites.net/'//change this to the Azure url after finish testing
         }
       ]
     },
