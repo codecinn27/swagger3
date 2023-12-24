@@ -40,8 +40,8 @@ const options = {
         },
       servers:[
         {
-            url: 'https://benr3433-information-security-assignment.azurewebsites.net/'
-            //url: 'http://localhost:3000'
+            //url: 'https://benr3433-information-security-assignment.azurewebsites.net/'
+            url: 'http://localhost:3000'
         }
       ]
     },
@@ -449,6 +449,22 @@ app.post('/visitor/register', authenticateToken, async (req, res) => {
 /**
  * @swagger
  *  /visitor/visitor_pass:
+ *    post:
+ *      summary: Create a visitor pass
+ *      tags:
+ *        - Visitor
+ *      security:
+ *        - Authorization: []
+ *      requestBody:
+ *        required: true
+ *        content:
+ *          application/json:
+ *            schema:
+ *               type: object
+ *               properties:
+ *                purpose_of_visit
+ *               required:
+ *                  
  */
 
 /**
