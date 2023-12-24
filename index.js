@@ -21,6 +21,21 @@ const options = {
         title: 'WJ BENR3433 INFORMATION SECURITY assignment',
         version: '1.0.0',
       },
+      tags:[
+        { name: 'default', description: 'Default endpoints' },
+        { name: 'User', description: 'Endpoints related to users' }
+      ],
+      components: {
+        securitySchemes: {
+            Authorization: {
+                type: "http",
+                scheme: "bearer",
+                bearerFormat: "JWT",
+                value: "Bearer <JWT token here>",
+                description:"this is for authentication only, to log out, please use the logout api"
+            }
+          }
+        },
       servers:[
         {
             url: 'https://benr3433-information-security-assignment.azurewebsites.net/'
@@ -60,11 +75,16 @@ const options = {
     res.send('Hello World! WJ')
  })
 
+
+
+
 /**
  * @swagger
  * /register:
  *  post:
- *      summary: registration for new user
+ *      summary: registration for new users
+ *      tags:
+ *        - User
  *      description: this api fetch data from mongodb
  *      requestBody:
  *          required: true
@@ -81,10 +101,7 @@ const options = {
  *                      type: object
  *                      properties:
  *                          user:
- *                              $ref: '#components/schema/User'
- *                          message:
- *                              type: string
- *                              description: Additional message
+ *                              $ref: '#components/schema/registersuccessful'
  *          409:
  *              description: Username has been taken
  *          500:
@@ -95,7 +112,7 @@ const options = {
  *                          type: object
  *                          properties:
  *                              message:
- *                                  type: string
+ *                                  $ref: '#components/schema/errormessage'
  */
  app.post('/register', async(req, res) => {
     try {
@@ -111,7 +128,7 @@ const options = {
           }  
           const user = await User.create(request)
           const responsemessage= 'User registered successfully';
-          res.status(200).json({user:user, message: responsemessage})}
+          res.status(200).json({username:user.username,name:user.name, message: responsemessage})}
         else{
             res.status(409).send('Username has been taken');
         }        
@@ -121,6 +138,141 @@ const options = {
     }
 })
 
+/**
+ * @swagger
+ *  /login:
+ *    post:
+ *      summary: Login for users
+ *      requestBody:
+ *        required: true
+ *        content:
+ *          application/json:
+ *            schema:
+ *               type: object
+ *               properties:
+ *                 username:
+ *                  type: string
+ *                 password:
+ *                  type: string
+ *      responses:
+ *        200:
+ *          description: Successful login
+ *          content:
+ *            application/json:
+ *              schema:
+ *                type: object
+ *                properties:
+ *                  username:
+ *                    type: string
+ *                    description: Username of the logged-in user
+ *                  message:
+ *                    type: string
+ *                    description: Login successful message
+ *                  accesstoken:
+ *                    type: string
+ *                    description: Generated access token for the logged-in user
+ *        401:
+ *          description: Unauthorized - Wrong password
+ *        404:
+ *          description: Username not found
+ *        409:
+ *          description: User is already logged in
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                 $ref: '#components/schema/errormessage'
+ *                
+ */
+
+
+app.post('/login',async(req,res)=>{
+  const {username,password}=req.body
+  try {
+    const b = await User.findOne({username:req.body.username})
+    if(b==null){
+      res.status(404).send('Username not found');
+    }else{
+      if(b.login_status==true){
+        res.status(409).send('User is already logged in');
+      }else{
+        const c = req.body.password === b.password;      
+        if(!c){
+          res.status(401).send('Unauthorized: Wrong password');
+        }else{
+        await User.updateOne({username:req.body.username},{$set:{login_status:true}})
+        const login_user= await User.findOne({username:req.body.username})
+        access_token=jwt.sign({username:login_user.username,user_id:login_user._id,role:login_user.role},process.env.JWT_SECRET)
+        res.json({username:login_user.username,message:"login successful",accesstoken: access_token})
+      }
+      }
+      }}
+   catch (error) {
+    console.log(error.message);
+        res.status(500).json({message: error.message})
+  }
+})
+
+//middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
+  if (token == null) return res.sendStatus(401)
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, login_user) => {
+    console.log(err)
+    if (err) return res.sendStatus(403)
+    req.user = login_user
+    next()
+  })
+}
+
+/**
+ * @swagger
+ *  /showjwt:
+ *    get:
+ *      summary: Display user information from JWT token
+ *      security:
+ *        - Authorization: []
+ *      responses:
+ *        200:
+ *          description: Successful retrieval of user information
+ *          content:
+ *            application/json:
+ *              schema:
+ *                $ref: '#components/schema/jwtinfo'
+ *                description: User information retrieved from JWT token
+ *        401:
+ *          description: Unauthorized - Invalid or missing token
+ *          
+ */
+//test jwt
+app.get('/showjwt',authenticateToken,(req,res)=>{
+  res.send(req.user)
+})
+
+//user logout(cannot interact with api after log out)
+app.patch('/logout',async(req,res)=>{
+  const {username}=req.body
+  try {
+    const a = await User.findOne({username:req.body.username})
+    if(a==null){
+      res.status(404).send('Username not found');
+    }else{
+      if(a.login_status!= true){
+        res.send("user has logout")
+      }else{
+        await User.updateOne({username:req.body.username},{$set:{login_status:false}})
+        res.send("successfully logout")
+      }
+    }
+    
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({message: error.message})
+  }
+})
 
 
 
@@ -137,6 +289,35 @@ const options = {
  *                      type: string
  *                  name:
  *                      type: string
+ * 
+ * 
+ *          registersuccessful:
+ *              type: object
+ *              properties:
+ *                  username:
+ *                      type: string
+ *                  name:
+ *                      type: string
+ *                  message:
+ *                      type: string
+ *                      description: Additional message
+ * 
+ *          errormessage:
+ *              type: object
+ *              properties:
+ *                message:
+ *                  type: string
+ *                  example: Internal server error occurred
+ * 
+ *          jwtinfo:
+ *            type: object
+ *            properties:
+ *              username:
+ *                type: string
+ *              user_id: 
+ *                type: string
+ *              role:
+ *                type: string
  * 
  *          User:
  *              type: object
