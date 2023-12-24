@@ -2,16 +2,16 @@ const mongoose = require('mongoose')
 
 const visitorschema = mongoose.Schema(
     {
-        name:{
+        full_name:{
             type: String,
             required: true
         },
-        gender:{
+        phone_number:{
             type: String,
             required: true
         },
-        age:{
-            type: Number,
+        email:{
+            type: String,
             required: true
         },
         license_number:{

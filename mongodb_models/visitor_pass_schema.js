@@ -17,9 +17,6 @@ const visitor_pass_schema = mongoose.Schema(
             type: String,
             required: true
         },
-        remarks:{
-            type: String,
-        },
         visit_date:{
             type: String,
             required: true
@@ -29,6 +26,10 @@ const visitor_pass_schema = mongoose.Schema(
         },
         checkout_time:{
             type: String
+        },
+        remarks:{
+            type: String,
+            required: true
         },
     },
     { versionKey: false }

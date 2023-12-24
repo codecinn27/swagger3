@@ -23,7 +23,9 @@ const options = {
       },
       tags:[
         { name: 'default', description: 'Default endpoints' },
-        { name: 'User', description: 'Endpoints related to users' }
+        { name: 'test', description: 'testing endpoints' },
+        { name: 'User', description: 'Endpoints related to users' },
+        { name: 'Visitor', description: 'Endpoints related to visitor' },
       ],
       components: {
         securitySchemes: {
@@ -32,7 +34,7 @@ const options = {
                 scheme: "bearer",
                 bearerFormat: "JWT",
                 value: "Bearer <JWT token here>",
-                description:"this is for authentication only, to log out, please use the logout api"
+                description:"this is for authentication only, to log out, please use the logout api. Logout here won't log you out of the account"
             }
           }
         },
@@ -66,6 +68,8 @@ const options = {
  * /:
  *  get:
  *      summary: This api is for testing
+ *      tags:
+ *        - test
  *      description: This api is used for testing
  *      responses:
  *          200:
@@ -143,6 +147,8 @@ const options = {
  *  /login:
  *    post:
  *      summary: Login for users
+ *      tags:
+ *        - User
  *      requestBody:
  *        required: true
  *        content:
@@ -173,10 +179,25 @@ const options = {
  *                    description: Generated access token for the logged-in user
  *        401:
  *          description: Unauthorized - Wrong password
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Unauthorized Wrong password
  *        404:
  *          description: Username not found
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Username not found
  *        409:
  *          description: User is already logged in
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: User is already logged in
  *        500:
  *          description: Internal server error
  *          content:
@@ -233,6 +254,8 @@ function authenticateToken(req, res, next) {
  *  /showjwt:
  *    get:
  *      summary: Display user information from JWT token
+ *      tags:
+ *        - test
  *      security:
  *        - Authorization: []
  *      responses:
@@ -252,27 +275,228 @@ app.get('/showjwt',authenticateToken,(req,res)=>{
   res.send(req.user)
 })
 
+
+/**
+ * @swagger
+ *  /logout:
+ *    patch:
+ *      summary: Logout user
+ *      tags:
+ *        - User
+ *      requestBody:
+ *        required: true
+ *        content:
+ *          application/json:
+ *            schema:
+ *              type: object
+ *              properties:
+ *                username:
+ *                  type: string
+ *      responses:
+ *        200:
+ *          description: Successfully logged out
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Successfully logged out
+ * 
+ *        400:
+ *          description: User has already logged out or invalid request
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: User has already logged out or invalid request
+ * 
+ *        404:
+ *          description: Username not found
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Username not found
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                 $ref: '#components/schema/errormessage'
+ */
 //user logout(cannot interact with api after log out)
-app.patch('/logout',async(req,res)=>{
-  const {username}=req.body
+app.patch('/logout', async (req, res) => {
+  const { username } = req.body;
   try {
-    const a = await User.findOne({username:req.body.username})
-    if(a==null){
+    const a = await User.findOne({ username: req.body.username });
+    if (a == null) {
       res.status(404).send('Username not found');
-    }else{
-      if(a.login_status!= true){
-        res.send("user has logout")
-      }else{
-        await User.updateOne({username:req.body.username},{$set:{login_status:false}})
-        res.send("successfully logout")
+    } else {
+      if (a.login_status !== true) {
+        res.status(400).send("User has already logged out");
+      } else {
+        await User.updateOne({ username: req.body.username }, { $set: { login_status: false } });
+        res.status(200).send("Successfully logged out");
       }
     }
-    
   } catch (error) {
     console.log(error.message);
-    res.status(500).json({message: error.message})
+    res.status(500).json({ message: error.message });
   }
-})
+});
+
+/**
+ * @swagger
+ *  /visitor/register:
+ *    post:
+ *      summary: Register a visitor for a user (1 user account only 1 visitor)
+ *      tags:
+ *        - Visitor
+ *      security:
+ *        - Authorization: []
+ *      requestBody:
+ *        required: true
+ *        content:
+ *          application/json:
+ *            schema:
+ *               type: object
+ *               properties:
+ *                  full_name:
+ *                    type: string
+ *                  phone_number:
+ *                    type: string
+ *                  email:
+ *                    type: string
+ *                    format: email
+ *                  license_number:
+ *                    type: string
+ *               required:
+ *                  - full_name
+ *                  - phone_number
+ *                  - email
+ *                  - license_number
+ *      responses:
+ *        200:
+ *          description: Visitor registered successfully
+ *          content:
+ *            application/json:
+ *              schema:
+ *                $ref: '#components/schema/Visitor'
+ * 
+ *        400:
+ *          description: Visitor already created for this user
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Visitor has been created for this user (1 user 1 visitor)
+ * 
+ *        401:
+ *          description: Unauthorized - User not logged in
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Please login
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                  $ref: '#components/schema/errormessage'
+ */
+
+/**
+ * Endpoint to register a visitor for a user (1 user account only 1 visitor)
+ */
+app.post('/visitor/register', authenticateToken, async (req, res) => {
+  try {
+    // Check if the user is logged in
+    const loggedInUser = await User.findOne({ _id: req.user.user_id });
+    if (!loggedInUser || loggedInUser.login_status !== true) {
+      return res.status(401).send('Please login');
+    }
+
+    // Check if the user already has a visitor ID
+    if (loggedInUser.visitor_id != null) {
+      return res.status(400).send('Visitor has been created for this user (1 user 1 visitor)');
+    }
+
+    // Create a visitor record
+    const newVisitorData = {
+      full_name: req.body.full_name,
+      phone_number: req.body.phone_number,
+      email: req.body.email,
+      license_number: req.body.license_number,
+      user_id: req.user.user_id // Link the visitor to the logged-in user
+    };
+
+    // Create the visitor
+    const visitor = await Visitor.create(newVisitorData);
+
+    // Update the user's visitor_id field with the newly created visitor's ID
+    await User.updateOne({ _id: req.user.user_id }, { $set: { 'visitor_id': visitor._id ,'role':'visitor'} });
+
+    // Return the newly created visitor details
+    return res.status(200).json(visitor);
+  } catch (error) {
+    console.log(error.message);
+    return res.status(500).json({ message: 'Internal server error occurred' });
+  }
+});
+
+
+
+/**
+ * @swagger
+ *  /visitor/visitor_pass:
+ */
+
+/**
+ * Endpoint to create a visitor pass
+ */
+app.post('/visitor/visitor_pass', authenticateToken, async (req, res) => {
+  try {
+    // Check if the user is logged in
+    const loggedInUser = await User.findOne({ _id: req.user.user_id });
+    if (!loggedInUser || loggedInUser.login_status !== true) {
+      return res.status(401).send('Please login');
+    }
+
+    // Find the visitor associated with the logged-in user
+    const visitor = await Visitor.findOne({ user_id: req.user.user_id });
+    if (!visitor) {
+      return res.status(404).send('Visitor not found for this user');
+    }
+
+    // Create a new visitor pass
+    const newVisitorPass = {
+      visitor_id: visitor._id,
+      purpose_of_visit: req.body.purpose_of_visit,
+      host_name: req.body.host_name,
+      host_address: req.body.host_address,
+      visit_date: req.body.visit_date,
+      checkin_time: Date.now(),
+      remarks: req.body.remarks
+    };
+
+    // Save the visitor pass details
+    const createdVisitorPass = await Pass.create(newVisitorPass);
+
+    // Update the visitor with the newly created visitor pass ID
+    await Visitor.updateOne(
+      { _id: visitor._id },
+      { $push: { 'visitor_pass_id': createdVisitorPass._id } }
+    );
+
+    // Return the newly created visitor pass details
+    return res.status(200).json(createdVisitorPass);
+  } catch (error) {
+    console.log(error.message);
+    return res.status(500).json({ message: 'Internal server error occurred' });
+  }
+});
+
+
 
 
 
@@ -335,4 +559,21 @@ app.patch('/logout',async(req,res)=>{
  *                      format: uuid
  *                  login_status:
  *                      type: boolean
+ * 
+ *          Visitor:
+ *              properties:
+ *                  full_name:
+ *                      type: string
+ *                  phone_number:
+ *                      type: string
+ *                  email:
+ *                      type: string 
+ *                  license_number:
+ *                      type: string
+ *                  user_id:
+ *                      type: string
+ *                  visitor_pass_id:
+ *                      type: array
+ *                      items:
+ *                        type: string
  */
