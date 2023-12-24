@@ -45,7 +45,7 @@ const options = {
         }
       ]
     },
-    apis: ['./index.js'], // files containing annotations as above
+    apis: ['./index.js'],
   };
   
   const openapiSpecification = swaggerJsdoc(options);
@@ -462,9 +462,51 @@ app.post('/visitor/register', authenticateToken, async (req, res) => {
  *            schema:
  *               type: object
  *               properties:
- *                purpose_of_visit
+ *                purpose_of_visit:
+ *                  type: string
+ *                host_name:
+ *                  type: string
+ *                host_address:
+ *                  type: string
+ *                visit_date:
+ *                  type: string
+ *                  format: date
+ *                remarks:
+ *                  type: string
  *               required:
- *                  
+ *                  - purpose_of_visit
+ *                  - host_name
+ *                  - host_address
+ *                  - visit_date
+ *      responses:
+ *        200:
+ *          description: Visitor pass created successfully
+ *          content:
+ *            application/json:
+ *              schema:
+ *                $ref: '#components/schema/Pass'
+ * 
+ *        401:
+ *          description: Unauthorized - User not logged in
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Please login
+ * 
+ *        404:
+ *          description: Visitor not found for this user
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Visitor not found for this user
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                  $ref: '#components/schema/errormessage'
  */
 
 /**
@@ -577,6 +619,23 @@ app.post('/visitor/visitor_pass', authenticateToken, async (req, res) => {
  *                      type: boolean
  * 
  *          Visitor:
+ *              properties:
+ *                  full_name:
+ *                      type: string
+ *                  phone_number:
+ *                      type: string
+ *                  email:
+ *                      type: string 
+ *                  license_number:
+ *                      type: string
+ *                  user_id:
+ *                      type: string
+ *                  visitor_pass_id:
+ *                      type: array
+ *                      items:
+ *                        type: string
+ * 
+ *          Pass:
  *              properties:
  *                  full_name:
  *                      type: string
