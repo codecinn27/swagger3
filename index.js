@@ -40,8 +40,8 @@ const options = {
         },
       servers:[
         {
-            //url: 'https://benr3433-information-security-assignment.azurewebsites.net/'
-            url: 'http://localhost:3000'
+            url: 'https://benr3433-information-security-assignment.azurewebsites.net/'
+            //url: 'http://localhost:3000'
         }
       ]
     },
