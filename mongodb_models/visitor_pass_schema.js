@@ -17,10 +17,6 @@ const visitor_pass_schema = mongoose.Schema(
             type: String,
             required: true
         },
-        visit_date:{
-            type: String,
-            required: true
-        },
         checkin_time:{
             type: String
         },

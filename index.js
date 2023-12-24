@@ -1,4 +1,3 @@
-require('dotenv').config()
 const express = require('express')
 const mongoose = require('mongoose')
 const User = require('./mongodb_models/user_schema')
@@ -11,6 +10,7 @@ const swaggerUi = require('swagger-ui-express');
 
 
 const port = process.env.PORT || 3000;
+const JWT_SECRET='12bob12ou2b1ob';
 
 app.use(express.json())
 
@@ -40,8 +40,8 @@ const options = {
         },
       servers:[
         {
-            url: 'https://benr3433-information-security-assignment.azurewebsites.net/'
-            //url: 'http://localhost:3000'
+            //url: 'https://benr3433-information-security-assignment.azurewebsites.net/'
+            url: 'http://localhost:3000'
         }
       ]
     },
@@ -224,7 +224,7 @@ app.post('/login',async(req,res)=>{
         }else{
         await User.updateOne({username:req.body.username},{$set:{login_status:true}})
         const login_user= await User.findOne({username:req.body.username})
-        access_token=jwt.sign({username:login_user.username,user_id:login_user._id,role:login_user.role},process.env.JWT_SECRET)
+        access_token=jwt.sign({username:login_user.username,user_id:login_user._id,role:login_user.role},JWT_SECRET)
         res.json({username:login_user.username,message:"login successful",accesstoken: access_token})
       }
       }
@@ -241,7 +241,7 @@ function authenticateToken(req, res, next) {
   const token = authHeader && authHeader.split(' ')[1]
   if (token == null) return res.sendStatus(401)
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, login_user) => {
+  jwt.verify(token, JWT_SECRET, (err, login_user) => {
     console.log(err)
     if (err) return res.sendStatus(403)
     req.user = login_user
@@ -468,16 +468,12 @@ app.post('/visitor/register', authenticateToken, async (req, res) => {
  *                  type: string
  *                host_address:
  *                  type: string
- *                visit_date:
- *                  type: string
- *                  format: date
  *                remarks:
  *                  type: string
  *               required:
  *                  - purpose_of_visit
  *                  - host_name
  *                  - host_address
- *                  - visit_date
  *      responses:
  *        200:
  *          description: Visitor pass created successfully
@@ -532,8 +528,6 @@ app.post('/visitor/visitor_pass', authenticateToken, async (req, res) => {
       purpose_of_visit: req.body.purpose_of_visit,
       host_name: req.body.host_name,
       host_address: req.body.host_address,
-      visit_date: req.body.visit_date,
-      checkin_time: Date.now(),
       remarks: req.body.remarks
     };
 
@@ -551,6 +545,45 @@ app.post('/visitor/visitor_pass', authenticateToken, async (req, res) => {
   } catch (error) {
     console.log(error.message);
     return res.status(500).json({ message: 'Internal server error occurred' });
+  }
+});
+
+
+
+/**
+ * Endpoint to check in a visitor pass by ID
+ */
+app.patch('/visitor/visitor_pass/checkin/:id', authenticateToken, async (req, res) => {
+  try {
+    // Check if the user is logged in
+    const loggedInUser = await User.findOne({ _id: req.user.user_id });
+    if (!loggedInUser || loggedInUser.login_status !== 'login') {
+      return res.status(401).send('Please login');
+    }
+
+    // Check if the user has registered as a visitor
+    if (loggedInUser.visitor_id == null) {
+      return res.status(400).send('Please register as a visitor');
+    }
+
+    // Update check-in time for the visitor pass
+    const date = new Date().toISOString();
+    const updatedVisitorPass = await Pass.findOneAndUpdate(
+      { _id: req.params.id },
+      { $set: { checkin_time: date } },
+      { new: true } // Return the updated document
+    );
+
+    // Check if the visitor pass was updated
+    if (!updatedVisitorPass) {
+      return res.status(404).send('Visitor pass not found');
+    }
+
+    // Return success message along with the updated visitor pass
+    res.status(200).json({ message: 'Visitor pass checked in successfully', updatedPass: updatedVisitorPass });
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({ message: 'Internal server error occurred' });
   }
 });
 
@@ -598,6 +631,7 @@ app.post('/visitor/visitor_pass', authenticateToken, async (req, res) => {
  *                type: string
  *              user_id: 
  *                type: string
+ *                format: uuid
  *              role:
  *                type: string
  * 
@@ -630,25 +664,30 @@ app.post('/visitor/visitor_pass', authenticateToken, async (req, res) => {
  *                      type: string
  *                  user_id:
  *                      type: string
+ *                      format: uuid
  *                  visitor_pass_id:
  *                      type: array
  *                      items:
  *                        type: string
+ *                        format: uuid
  * 
  *          Pass:
  *              properties:
- *                  full_name:
+ *                  visitor_id:
  *                      type: string
- *                  phone_number:
+ *                      format: uuid
+ *                  purpose_of_visit:
  *                      type: string
- *                  email:
+ *                  host_name:
  *                      type: string 
- *                  license_number:
+ *                  host_address:
  *                      type: string
- *                  user_id:
+ *                  checkin_time:
  *                      type: string
- *                  visitor_pass_id:
- *                      type: array
- *                      items:
- *                        type: string
+ *                      format: date-time
+ *                  checkout_time:
+ *                      type: string
+ *                      format: date-time
+ *                  remarks:
+ *                      type: string
  */
