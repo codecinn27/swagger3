@@ -26,6 +26,8 @@ const options = {
         { name: 'test', description: 'testing endpoints' },
         { name: 'User', description: 'Endpoints related to users' },
         { name: 'Visitor', description: 'Endpoints related to visitor' },
+        { name: 'Read', description: 'Endpoints to read own file' },
+        { name: 'For Admin Only', description: 'Endpoints for admin to manage user' },
       ],
       components: {
         securitySchemes: {
@@ -224,7 +226,7 @@ app.post('/login',async(req,res)=>{
         }else{
         await User.updateOne({username:req.body.username},{$set:{login_status:true}})
         const login_user= await User.findOne({username:req.body.username})
-        access_token=jwt.sign({username:login_user.username,user_id:login_user._id,role:login_user.role},JWT_SECRET)
+        access_token=jwt.sign({username:login_user.username,user_id:login_user._id},JWT_SECRET)
         res.json({username:login_user.username,message:"login successful",accesstoken: access_token})
       }
       }
@@ -549,7 +551,66 @@ app.post('/visitor/visitor_pass', authenticateToken, async (req, res) => {
 });
 
 
-
+/**
+ * @swagger
+ *  /visitor/visitor_pass/checkin/{id}:
+ *    patch:
+ *      summary: Check in a visitor pass by ID
+ *      tags:
+ *        - Visitor
+ *      security:
+ *        - Authorization: []
+ *      parameters:
+ *        - in: path
+ *          name: id
+ *          required: true
+ *          description: ID of the visitor pass to check in
+ *          schema:
+ *            type: string
+ *      responses:
+  *        200:
+ *          description: Visitor pass checked in successfully
+ *          content:
+ *            application/json:
+ *              schema:
+ *                type: object
+ *                properties:
+ *                  message:
+ *                    type: string
+ *                    example: Visitor pass checked in successfully
+ *                  updatedPass:
+ *                    $ref: '#components/schema/Pass'
+ * 
+ *        400:
+ *          description: User has not registered as a visitor
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Please register as a visitor
+ * 
+ *        401:
+ *          description: Unauthorized - User not logged in
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Please login
+ * 
+ *        404:
+ *          description: Visitor pass not found
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Visitor pass not found
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                  $ref: '#components/schema/errormessage'          
+ */
 /**
  * Endpoint to check in a visitor pass by ID
  */
@@ -557,13 +618,19 @@ app.patch('/visitor/visitor_pass/checkin/:id', authenticateToken, async (req, re
   try {
     // Check if the user is logged in
     const loggedInUser = await User.findOne({ _id: req.user.user_id });
-    if (!loggedInUser || loggedInUser.login_status !== 'login') {
+    if (!loggedInUser || loggedInUser.login_status !== true) {
       return res.status(401).send('Please login');
     }
 
     // Check if the user has registered as a visitor
     if (loggedInUser.visitor_id == null) {
       return res.status(400).send('Please register as a visitor');
+    }
+
+    // Check if the visitor pass is already checked in
+    const existingVisitorPass = await Pass.findOne({ _id: req.params.id, checkin_time: { $exists: true } });
+    if (existingVisitorPass) {
+      return res.status(400).send('Visitor pass already checked in');
     }
 
     // Update check-in time for the visitor pass
@@ -584,6 +651,368 @@ app.patch('/visitor/visitor_pass/checkin/:id', authenticateToken, async (req, re
   } catch (error) {
     console.log(error.message);
     res.status(500).json({ message: 'Internal server error occurred' });
+  }
+});
+
+/**
+ * @swagger
+ *  /visitor/visitor_pass/checkout/{id}:
+ *    patch:
+ *      summary: Check out a visitor pass by ID
+ *      tags:
+ *        - Visitor
+ *      security:
+ *        - Authorization: []
+ *      parameters:
+ *        - in: path
+ *          name: id
+ *          required: true
+ *          description: ID of the visitor pass to check out
+ *          schema:
+ *            type: string
+ *      responses:
+  *        200:
+ *          description: Visitor pass checked out successfully
+ *          content:
+ *            application/json:
+ *              schema:
+ *                type: object
+ *                properties:
+ *                  message:
+ *                    type: string
+ *                    example: Visitor pass checked out successfully
+ *                  updatedPass:
+ *                    $ref: '#components/schema/Pass'
+ * 
+ *        400:
+ *          description: User has not registered as a visitor
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Please register as a visitor
+ * 
+ *        401:
+ *          description: Unauthorized - User not logged in
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Please login
+ * 
+ *        404:
+ *          description: Visitor pass not checked in or not found
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Visitor pass not checked in or not found
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                  $ref: '#components/schema/errormessage'          
+ */
+/**
+ * Endpoint to check out all visitor pass by ID
+ */
+app.patch('/visitor/visitor_pass/checkout/:id', authenticateToken, async (req, res) => {
+  try {
+    // Check if the user is logged in
+    const loggedInUser = await User.findOne({ _id: req.user.user_id });
+    if (!loggedInUser || loggedInUser.login_status !== true) {
+      return res.status(401).send('Please login');
+    }
+
+    // Check if the user has registered as a visitor
+    if (loggedInUser.visitor_id == null) {
+      return res.status(400).send('Please register as a visitor');
+    }
+
+    // Check if the visitor pass exists and was checked in
+    const existingVisitorPass = await Pass.findOne({ _id: req.params.id, checkin_time: { $exists: true } });
+    if (!existingVisitorPass) {
+      return res.status(404).send('Visitor pass not checked in or not found');
+    }
+
+    // Check if the visitor pass exists and was checked out
+    const alreadyCheckedOutPass = await Pass.findOne({ _id: req.params.id, checkout_time: { $exists: true } });
+    if (alreadyCheckedOutPass) {
+        return res.status(400).send('Visitor pass already checked out');
+    }
+
+    // Update checkout time for the visitor pass
+    const date = new Date().toISOString();
+    const updatedVisitorPass = await Pass.findOneAndUpdate(
+      { _id: req.params.id },
+      { $set: { checkout_time: date } },
+      { new: true } // Return the updated document
+    );
+
+    // Return success message along with the updated visitor pass
+    res.status(200).json({ message: 'Visitor pass checked out successfully', updatedPass: updatedVisitorPass });
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({ message: 'Internal server error occurred' });
+  }
+});
+
+
+
+/**
+ * @swagger
+ *  /read/user:
+ *    get:
+ *      summary: Retrieve own user information
+ *      security:
+ *        - Authorization: []
+ *      tags:
+ *        - Read
+ *      description: Retrieves the user document if the user is logged in
+ *      responses:
+ *        200:
+ *          description: Successful operation
+ *          content:
+ *            application/json:
+ *              schema:
+ *                $ref: '#/components/schemas/User'
+ *        401:
+ *          description: Unauthorized, please login
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Unauthorized, please login
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                 $ref: '#components/schema/errormessage'
+ *                
+ */
+//read own user profile
+app.get('/read/user', authenticateToken, async (req, res) => {
+  try {
+    // Find the logged-in user document
+    const loggedInUser = await User.findOne({ _id: req.user.user_id, login_status: true });
+
+    // Check if the logged-in user exists and is logged in
+    if (!loggedInUser) {
+      return res.status(401).send('Please login');
+    }
+
+    // Respond with the user document
+    res.status(200).json(loggedInUser);
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({ message: 'Internal server error occurred' });
+  }
+});
+
+/**
+ * @swagger
+ *  /read/visitor:
+ *    get:
+ *      summary: Retrieve own visitor information
+ *      security:
+ *        - Authorization: []
+ *      tags:
+ *        - Read
+ *      description: Retrieves the visitor document if the user is logged in
+ *      responses:
+ *        200:
+ *          description: Successful operation
+ *          content:
+ *            application/json:
+ *              schema:
+ *                $ref: '#/components/schemas/Visitor'
+ *        401:
+ *          description: Unauthorized, please login
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Unauthorized, please login
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                 $ref: '#components/schema/errormessage'
+ *                
+ */
+//read own visitor profile
+app.get('/read/visitor', authenticateToken, async (req, res) => {
+  try {
+    // Find the logged-in user document
+    const loggedInUser = await User.findOne({ _id: req.user.user_id, login_status: true });
+
+    // Check if the logged-in user exists and is logged in
+    if (!loggedInUser) {
+      return res.status(401).send('Please login');
+    }
+
+    const associatedVisitors = await Visitor.findOne({ _id: loggedInUser.visitor_id });
+    res.status(200).json(associatedVisitors);
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({ message: 'Internal server error occurred' });
+  }
+});
+
+/**
+ * @swagger
+ *  /read/visitor_pass:
+ *    get:
+ *      summary: Retrieve own visitor information
+ *      security:
+ *        - Authorization: []
+ *      tags:
+ *        - Read
+ *      description: Retrieves all visitor passes associated with the logged-in user
+ *      responses:
+ *        200:
+ *          description: Successful operation
+ *          content:
+ *            application/json:
+ *              schema:
+ *                type: array
+ *                items:
+ *                  $ref: '#/components/schemas/Pass'
+ *        401:
+ *          description: Unauthorized, please login
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Unauthorized, please login
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                 $ref: '#components/schema/errormessage'
+ *                
+ */
+//read all own visitor_pass 
+app.get('/read/visitor_pass', authenticateToken, async (req, res) => {
+  try {
+    // Find the logged-in user document
+    const loggedInUser = await User.findOne({ _id: req.user.user_id, login_status: true });
+
+    // Check if the logged-in user exists and is logged in
+    if (!loggedInUser) {
+      return res.status(401).send('Please login');
+    }
+
+    const passList = await Pass.find({ visitor_id: loggedInUser.visitor_id });
+    res.status(200).json(passList);
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).json({ message: 'Internal server error occurred' });
+  }
+});
+
+
+/**
+ * @swagger
+ *  /read/visitor_pass/{id}:
+ *    get:
+ *      summary: Read one visitor pass by ID
+ *      description: Visitor can only search their own visitor pass while admin can search visitor pass of any visitor
+ *      tags:
+ *        - Read
+ *      security:
+ *        - Authorization: []
+ *      parameters:
+ *        - in: path
+ *          name: id
+ *          required: true
+ *          description: The ID of the visitor pass to retrieve
+ *          schema:
+ *            type: string
+ *      responses:
+ *        200:
+ *          description: OK. Visitor pass details retrieved successfully.
+ *          content:
+ *            application/json:
+ *              schema:
+ *                $ref: '#components/schema/Pass'
+ * 
+ *        401:
+ *          description: Unauthorized. Please login.
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Unauthorized. Please login.
+ * 
+ *        403:
+ *          description: Forbidden. Access denied. You are not authorized to view this visitor pass.
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Forbidden. Access denied. You are not authorized to view this visitor pass.
+ * 
+ *        404:
+ *          description: Visitor pass not found.
+ *          content:
+ *            text/plain:
+ *              schema:
+ *                type: string
+ *                example: Visitor pass not found.
+ *        500:
+ *          description: Internal server error
+ *          content:
+ *            application/json:
+ *              schema:
+ *                  $ref: '#components/schema/errormessage'          
+ */
+// Read one visitor pass based on its ID
+app.get('/read/visitor_pass/:id', authenticateToken, async (req, res) => {
+  try {
+    // Check if the user is logged in
+    const loggedInUser = await User.findOne({ _id: req.user.user_id });
+    if (!loggedInUser || loggedInUser.login_status !== true) {
+      return res.status(401).send('Please login');
+    }
+
+    // Try finding the specific visitor pass
+    let a;
+    try {
+      a = await Pass.findOne({ _id: req.params.id });
+    } catch (error) {
+      console.log(error.message);
+      return res.status(500).json({ message: error.message });
+    }
+
+    if (!a) {
+      return res.status(404).json({ message: 'Visitor pass not found' });
+    }
+
+    if (loggedInUser.role !== 'admin') {
+      // Check if the user has registered as a visitor
+      if (loggedInUser.visitor_id == null) {
+        return res.status(400).send('Please register as a visitor');
+      }
+
+      // Deny access if trying to access other visitor's visitor pass
+      if (a.visitor_id != loggedInUser.visitor_id) {
+        return res.status(403).json({ message: 'Access denied. You are not authorized to view this visitor pass.' });
+      }
+
+      // Return the visitor pass if authorized
+      return res.status(200).json(a);
+    } else {
+      // Admin access
+      return res.status(200).json(a);
+    }
+  } catch (error) {
+    console.log(error.message);
+    return res.status(500).json({ message: 'Internal server error occurred' });
   }
 });
 
@@ -632,8 +1061,6 @@ app.patch('/visitor/visitor_pass/checkin/:id', authenticateToken, async (req, re
  *              user_id: 
  *                type: string
  *                format: uuid
- *              role:
- *                type: string
  * 
  *          User:
  *              type: object
