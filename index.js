@@ -41,13 +41,7 @@ const options = {
                 description:"this is for authentication only, to log out, please use the logout api. Logout here won't log you out of the account"
             }
           }
-        },
-      servers:[
-        {
-            url: 'https://benr3433-information-security-assignment.azurewebsites.net/'
-            //url: 'http://localhost:3000'
         }
-      ]
     },
     apis: ['./index.js'],
   };
@@ -56,7 +50,7 @@ const options = {
   app.use('/swagger', swaggerUi.serve, swaggerUi.setup(openapiSpecification));
 
 
- mongoose.connect('mongodb+srv://jng010422:7NVCOJQwL6do3rXn@cluster0.junlsj6.mongodb.net/WJ_VMS')
+ mongoose.connect('mongodb+srv://codecinnpro:9qLtJIAG9k8G1Pe8@cluster0.egrjwh1.mongodb.net/YC_VMS')
  .then(()=>{
      console.log('connected to mongodb')
      app.listen(port,() => {
